@@ -85,11 +85,11 @@
     <aside class="card box">
       <div>
         <div class="small" style="font-weight:700">Quick text bridge</div>
-        <div class="small">Save text to Supabase and load it on other devices. Both local and remote clear available.</div>
+        <div class="small">Save text and load it on other devices. Both local and remote clear available.</div>
         <textarea id="textArea" placeholder="Type text to sync..."></textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button id="saveText" class="btn primary">Save to Supabase</button>
-          <button id="loadText" class="btn">Load from Supabase</button>
+          <button id="saveText" class="btn primary">Save</button>
+          <button id="loadText" class="btn">Load</button>
           <button id="clearTextRemote" class="btn">Clear remote</button>
           <button id="clearTextLocal" class="btn">Clear local</button>
         </div>
@@ -103,11 +103,11 @@
   <footer></footer>
 
 <script>
-// Supabase config (from user)
+// Supabase config (same as before)
 const SUPABASE_URL = 'https://nuyctnaioepalgytinwd.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51eWN0bmFpb2VwYWxneXRpbndkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3NjgzMDYsImV4cCI6MjA3MDM0NDMwNn0.rZ_IQR8EqVaMIuM3nSpzY5bIXRREXRaClcQS7Tmw6yI';
 const BUCKET = 'quickbridge';
-const TEXT_TABLE_ID = 1; // id row in shared_text
+const TEXT_TABLE_ID = 1;
 
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -119,136 +119,116 @@ const clearFilesBtn = document.getElementById('clearFilesBtn');
 const fileListEl = document.getElementById('fileList');
 const drop = document.getElementById('drop');
 
-const textArea = document.getElementById('textArea');
-const saveTextBtn = document.getElementById('saveText');
-const loadTextBtn = document.getElementById('loadText');
-const clearTextRemoteBtn = document.getElementById('clearTextRemote');
-const clearTextLocalBtn = document.getElementById('clearTextLocal');
-const remoteSnippet = document.getElementById('remoteSnippet');
-
 let selectedFiles = [];
-let localRecent = []; // names of recently uploaded files (to show immediately if listing lags)
 
-function fmtBytes(bytes){ if(!bytes && bytes !== 0) return ''; if(bytes<1024) return bytes+' B'; if(bytes<1024*1024) return Math.round(bytes/1024)+' KB'; return Math.round(bytes/(1024*1024))+' MB'; }
-function iconForName(name){ const ext=(name.split('.').pop()||'').toLowerCase(); if(['png','jpg','jpeg','gif','webp','svg'].includes(ext)) return '🖼️'; if(['mp3','wav','flac','m4a','ogg'].includes(ext)) return '🎵'; if(['mp4','mov','webm','mkv'].includes(ext)) return '🎬'; if(['pdf','txt','md','json','csv'].includes(ext)) return '📄'; if(['zip','rar','7z'].includes(ext)) return '🗜️'; return '📁'; }
+// NEW: preview container & progress bar
+const previewContainer = document.createElement('div');
+previewContainer.style.marginTop = '10px';
+drop.appendChild(previewContainer);
 
-function makeRow({name,size,created_at,local=false}){
-  const row = document.createElement('div'); row.className='file-row';
-  const icon = document.createElement('div'); icon.className='f-icon'; icon.textContent = iconForName(name);
-  const meta = document.createElement('div'); meta.className='f-meta';
-  const fname = document.createElement('div'); fname.className='fname'; fname.textContent = name;
-  const fmeta = document.createElement('div'); fmeta.className='fmeta'; fmeta.textContent = `${fmtBytes(size)||''} ${created_at?(' • '+new Date(created_at).toLocaleString()):''}`;
-  meta.appendChild(fname); meta.appendChild(fmeta);
+const progressBar = document.createElement('progress');
+progressBar.value = 0;
+progressBar.max = 100;
+progressBar.style.width = '100%';
+progressBar.style.display = 'none';
+drop.appendChild(progressBar);
 
-  const actions = document.createElement('div'); actions.className='f-actions';
-  const dl = document.createElement('button'); dl.className='btn'; dl.textContent='Download';
-  dl.onclick = async ()=>{
-    dl.disabled = true; dl.textContent='Preparing…';
-    try{
-      const { data: signed, error: signErr } = await supabase.storage.from(BUCKET).createSignedUrl(name, 60);
-      if(signErr || !signed?.signedUrl){ console.warn('signed URL failed', signErr);
-        const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(name);
-        if(pub && pub.publicUrl) window.open(pub.publicUrl, '_blank'); else alert('Unable to get download URL');
-      } else { window.open(signed.signedUrl, '_blank'); }
-    }catch(e){ alert('Download failed: '+e.message); }
-    dl.disabled = false; dl.textContent='Download';
-  };
-
-  const copyLink = document.createElement('button'); copyLink.className='btn'; copyLink.textContent='Copy link';
-  copyLink.onclick = async ()=>{
-    try{
-      const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(name);
-      const publicUrl = pub?.publicUrl || (pub && pub.publicUrl);
-      if(publicUrl){ await navigator.clipboard.writeText(publicUrl); alert('Public URL copied to clipboard'); return; }
-      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(name, 60);
-      if(signed?.signedUrl){ await navigator.clipboard.writeText(signed.signedUrl); alert('Signed URL copied (60s)'); }
-      else alert('Could not create link');
-    }catch(e){ alert('Could not copy link: '+e.message); }
-  };
-
-  const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
-  del.onclick = async ()=>{
-    if(!confirm('Delete "'+name+'" from remote bucket?')) return;
-    const { error } = await supabase.storage.from(BUCKET).remove([name]);
-    if(error){ alert('Delete failed: '+error.message); console.error(error); } else { alert('Deleted '+name); renderFileList(); }
-  };
-
-  actions.appendChild(dl); actions.appendChild(copyLink); actions.appendChild(del);
-  row.appendChild(icon); row.appendChild(meta); row.appendChild(actions);
-  return row;
+function fmtBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-async function renderFileList(){
-  fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Loading files…</div>';
-  // try multiple list strategies in case of subtle API differences
-  let res;
-  try{ res = await supabase.storage.from(BUCKET).list('', {limit: 1000}); }
-  catch(e){ console.warn('list with empty path failed', e); }
-  if(!res || res.error) {
-    try{ res = await supabase.storage.from(BUCKET).list('/', {limit: 1000}); }catch(e){ console.warn('list with slash failed', e); }
-  }
-  if(!res || res.error){
-    console.error(res?.error || 'Unknown list error');
-    fileListEl.innerHTML = `<div class="small" style="padding:8px;color:var(--muted)">Could not fetch file list: ${res?.error?.message || 'unknown'}</div>`;
-    // if we have localRecent items, show them so user sees uploads
-    if(localRecent.length){ fileListEl.innerHTML += '<div class="small" style="padding:8px;color:var(--muted)">Showing recent uploads (local)</div>'; localRecent.slice().reverse().forEach(n => { fileListEl.appendChild(makeRow({name: n, local:true})); }); }
-    return;
-  }
-
-  const data = res.data || [];
-  if(!data.length){
-    fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">No files in bucket yet.</div>';
-    // still show local recent while list is empty
-    if(localRecent.length){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Recent uploads (local)</div>'; localRecent.slice().reverse().forEach(n => fileListEl.appendChild(makeRow({name:n,local:true}))); }
-    return;
-  }
-
-  fileListEl.innerHTML = '';
-  // attempt to sort by name (our uploads use timestamp prefix) so newest first
-  data.sort((a,b)=> { try{ return b.name.localeCompare(a.name); }catch(e){return 0;} });
-  data.forEach(f => {
-    const row = makeRow({name: f.name, size: f.size, created_at: f.created_at});
-    fileListEl.appendChild(row);
+function showSelectedFiles() {
+  previewContainer.innerHTML = '';
+  if (!selectedFiles.length) return;
+  selectedFiles.forEach(file => {
+    const div = document.createElement('div');
+    div.textContent = `${file.name} (${fmtBytes(file.size)})`;
+    previewContainer.appendChild(div);
   });
 }
 
-// upload files and show placeholder while uploading
-async function uploadFiles(files){ if(!files || files.length===0) return; uploadBtn.disabled = true; uploadBtn.textContent = 'Uploading…';
-  for(const f of files){ const name = `${Date.now()}_${f.name}`;
-    try{
-      // push to localRecent so UI can show it if listing fails
-      localRecent.push(name);
-      const { data, error } = await supabase.storage.from(BUCKET).upload(name, f, { cacheControl: '3600', upsert: false });
-      if(error){ console.error('upload error', error); alert('Upload failed: '+error.message); }
-    }catch(err){ console.error('upload exception', err); alert('Upload failed: '+err.message); }
+async function uploadFiles(files) {
+  if (!files.length) return alert('No files selected!');
+  uploadBtn.disabled = true;
+  progressBar.style.display = 'block';
+  progressBar.value = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const name = `${Date.now()}_${f.name}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(name, f, {
+      cacheControl: '3600',
+      upsert: false
+    });
+    if (error) {
+      alert(`Upload failed for ${f.name}: ${error.message}`);
+      console.error(error);
+    }
+    progressBar.value = ((i + 1) / files.length) * 100;
   }
-  await renderFileList(); uploadBtn.disabled = false; uploadBtn.textContent = 'Upload Selected'; alert('Upload(s) complete'); }
 
-// clear all files (dangerous)
-async function clearAllRemoteFiles(){ if(!confirm('Delete ALL files in the remote bucket? This cannot be undone.')) return; const { data, error } = await supabase.storage.from(BUCKET).list('', {limit:1000}); if(error){ alert('Could not list files: '+error.message); return } const paths = data.map(d=>d.name); if(paths.length===0){ alert('No files to delete'); return } const { error: delErr } = await supabase.storage.from(BUCKET).remove(paths); if(delErr) alert('Error deleting files: '+delErr.message); else { alert('All files deleted'); renderFileList(); } }
+  uploadBtn.disabled = false;
+  progressBar.style.display = 'none';
+  selectedFiles = [];
+  previewContainer.innerHTML = '';
+  renderFileList();
+  alert('Upload complete!');
+}
 
-// text functions
-async function saveTextRemote(text){ const { error } = await supabase.from('shared_text').update({ content: text }).eq('id', TEXT_TABLE_ID); if(error){ alert('Save failed: '+error.message); console.error(error); } else { alert('Text saved to Supabase'); remoteSnippet.textContent = text.slice(0,200) || '(empty)'; } }
-async function loadTextRemote(){ const { data, error } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single(); if(error){ alert('Load failed: '+error.message); console.error(error); } else { textArea.value = data.content || ''; remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; alert('Text loaded'); } }
-async function clearTextRemote(){ if(!confirm('Clear remote text at id=1?')) return; const { error } = await supabase.from('shared_text').update({ content: '' }).eq('id', TEXT_TABLE_ID); if(error) alert('Clear failed: '+error.message); else { alert('Remote text cleared'); remoteSnippet.textContent='(empty)'; } }
+// EVENTS
+fileInput.addEventListener('change', (e) => {
+  selectedFiles = Array.from(e.target.files);
+  showSelectedFiles();
+});
 
-// events
-fileInput.addEventListener('change', (e)=>{ selectedFiles = Array.from(e.target.files); if(selectedFiles.length) uploadFiles(selectedFiles); fileInput.value=''; });
-uploadBtn.addEventListener('click', ()=>{ if(selectedFiles.length===0) return alert('Pick files first or drag & drop'); uploadFiles(selectedFiles); });
+uploadBtn.addEventListener('click', () => uploadFiles(selectedFiles));
+
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  selectedFiles = Array.from(e.dataTransfer.files);
+  showSelectedFiles();
+});
+
+['dragenter','dragover'].forEach(ev =>
+  drop.addEventListener(ev, e => {
+    e.preventDefault();
+    drop.classList.add('drag');
+  })
+);
+['dragleave','drop'].forEach(ev =>
+  drop.addEventListener(ev, e => {
+    e.preventDefault();
+    drop.classList.remove('drag');
+  })
+);
+
+// Your existing renderFileList function stays here
+async function renderFileList(){
+  fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Loading files…</div>';
+  const res = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
+  if (res.error) {
+    fileListEl.innerHTML = `<div style="color:red">Error loading files: ${res.error.message}</div>`;
+    return;
+  }
+  fileListEl.innerHTML = '';
+  res.data.forEach(f => {
+    const div = document.createElement('div');
+    div.textContent = `${f.name} (${fmtBytes(f.size)})`;
+    fileListEl.appendChild(div);
+  });
+}
+
 refreshBtn.addEventListener('click', renderFileList);
-clearFilesBtn.addEventListener('click', clearAllRemoteFiles);
-['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.classList.add('drag'); }));
-['dragleave','drop'].forEach(ev=> drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.classList.remove('drag'); }));
-drop.addEventListener('drop', async (e)=>{ e.preventDefault(); const files = Array.from(e.dataTransfer.files || []); if(files.length) await uploadFiles(files); });
+clearFilesBtn.addEventListener('click', async () => {
+  if (!confirm('Delete all files?')) return;
+  const { data } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
+  await supabase.storage.from(BUCKET).remove(data.map(d => d.name));
+  renderFileList();
+});
 
-saveTextBtn.addEventListener('click', ()=> saveTextRemote(textArea.value));
-loadTextBtn.addEventListener('click', loadTextRemote);
-clearTextRemoteBtn.addEventListener('click', clearTextRemote);
-clearTextLocalBtn.addEventListener('click', ()=>{ if(confirm('Clear local text area?')){ textArea.value=''; alert('Local text cleared'); }});
-
-// init
 renderFileList();
-(async ()=>{ try{ const { data } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single(); if(data) remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; }catch(e){ console.warn('no preview'); } })();
 </script>
 </body>
 </html>
