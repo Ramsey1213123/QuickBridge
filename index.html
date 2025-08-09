@@ -3,15 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>QuickBridge — Supabase File Bridge</title>
+  <title>QuickBridge — Supabase File Bridge (Fixed)</title>
   <meta name="color-scheme" content="dark">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    /* Fluid animated background */
     :root{--bg1:#071025;--bg2:#08121a;--glass:rgba(255,255,255,0.06);--muted:#b6c2cc;--accent:#ffd166;--radius:20px}
     *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#ecf6ff}
     html,body{height:100%;margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2));overflow-y:auto}
-    /* animated gradient shapes */
     .bg-blob{position:fixed;inset:-20% -10% auto auto;z-index:-2;filter:blur(80px);opacity:0.9;transform:translateZ(0)}
     .blob-1{width:60vmax;height:60vmax;background:radial-gradient(circle at 30% 30%, #ff8a8a, transparent 25%), radial-gradient(circle at 70% 70%, #ffd16655, transparent 20%);animation:float 12s ease-in-out infinite}
     .blob-2{position:fixed;right:-10%;bottom:-10%;width:50vmax;height:50vmax;background:radial-gradient(circle at 20% 30%, #6be0ff55, transparent 20%), radial-gradient(circle at 80% 70%, #a89bff55, transparent 25%);filter:blur(100px);animation:float 18s ease-in-out infinite reverse}
@@ -20,21 +18,18 @@
     .app{max-width:1100px;margin:36px auto;padding:20px;display:grid;grid-template-columns:1fr 420px;gap:20px}
     @media (max-width:920px){.app{grid-template-columns:1fr;padding:16px;margin:18px auto}}
 
-    /* frosted glass cards */
     .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:24px;padding:18px;backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.04)}
     header{display:flex;gap:14px;align-items:center;margin-bottom:12px}
     .logo{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#ffd166,#ff7b7b);display:grid;place-items:center;font-weight:800;color:#061018}
     h1{margin:0;font-size:18px}
     p.lead{margin:2px 0 0;color:var(--muted);font-size:13px}
 
-    /* upload area */
     .drop{min-height:220px;border-radius:16px;border:1px dashed rgba(255,255,255,0.05);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px}
     .drop.drag{border-color:rgba(255,255,255,0.12)}
     .controls{display:flex;gap:8px;flex-wrap:wrap}
     .btn{padding:10px 14px;border-radius:12px;border:none;background:rgba(255,255,255,0.04);color:inherit;cursor:pointer}
     .btn.primary{background:linear-gradient(90deg,#ffd166,#ff7b7b);color:#061018;font-weight:700}
 
-    /* file list */
     .file-list{margin-top:14px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto;padding-right:6px}
     .file-row{display:flex;gap:12px;align-items:center;padding:10px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));}
     .f-icon{width:56px;height:56px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,0.25);font-size:20px}
@@ -43,7 +38,6 @@
     .fmeta{font-size:12px;color:var(--muted);margin-top:4px}
     .f-actions{display:flex;gap:8px}
 
-    /* right column */
     .box{display:flex;flex-direction:column;gap:12px}
     textarea{width:100%;min-height:160px;background:transparent;border-radius:12px;border:1px solid rgba(255,255,255,0.04);padding:12px;color:inherit;font-size:14px}
     .small{font-size:13px;color:var(--muted)}
@@ -133,91 +127,116 @@ const clearTextLocalBtn = document.getElementById('clearTextLocal');
 const remoteSnippet = document.getElementById('remoteSnippet');
 
 let selectedFiles = [];
+let localRecent = []; // names of recently uploaded files (to show immediately if listing lags)
 
-// --- Helpers ---
-function fmtBytes(bytes){ if(bytes<1024) return bytes+' B'; if(bytes<1024*1024) return Math.round(bytes/1024)+' KB'; return Math.round(bytes/(1024*1024))+' MB'; }
+function fmtBytes(bytes){ if(!bytes && bytes !== 0) return ''; if(bytes<1024) return bytes+' B'; if(bytes<1024*1024) return Math.round(bytes/1024)+' KB'; return Math.round(bytes/(1024*1024))+' MB'; }
 function iconForName(name){ const ext=(name.split('.').pop()||'').toLowerCase(); if(['png','jpg','jpeg','gif','webp','svg'].includes(ext)) return '🖼️'; if(['mp3','wav','flac','m4a','ogg'].includes(ext)) return '🎵'; if(['mp4','mov','webm','mkv'].includes(ext)) return '🎬'; if(['pdf','txt','md','json','csv'].includes(ext)) return '📄'; if(['zip','rar','7z'].includes(ext)) return '🗜️'; return '📁'; }
 
-// show files in UI
-async function renderFileList(){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Loading files…</div>';
-  const { data, error } = await supabase.storage.from(BUCKET).list('', {limit: 100, sortBy: { column: 'created_at', order: 'desc'} });
-  if(error){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Error fetching files: '+error.message+'</div>'; console.error(error); return }
-  if(!data || data.length===0){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">No files in bucket yet.</div>'; return }
+function makeRow({name,size,created_at,local=false}){
+  const row = document.createElement('div'); row.className='file-row';
+  const icon = document.createElement('div'); icon.className='f-icon'; icon.textContent = iconForName(name);
+  const meta = document.createElement('div'); meta.className='f-meta';
+  const fname = document.createElement('div'); fname.className='fname'; fname.textContent = name;
+  const fmeta = document.createElement('div'); fmeta.className='fmeta'; fmeta.textContent = `${fmtBytes(size)||''} ${created_at?(' • '+new Date(created_at).toLocaleString()):''}`;
+  meta.appendChild(fname); meta.appendChild(fmeta);
+
+  const actions = document.createElement('div'); actions.className='f-actions';
+  const dl = document.createElement('button'); dl.className='btn'; dl.textContent='Download';
+  dl.onclick = async ()=>{
+    dl.disabled = true; dl.textContent='Preparing…';
+    try{
+      const { data: signed, error: signErr } = await supabase.storage.from(BUCKET).createSignedUrl(name, 60);
+      if(signErr || !signed?.signedUrl){ console.warn('signed URL failed', signErr);
+        const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(name);
+        if(pub && pub.publicUrl) window.open(pub.publicUrl, '_blank'); else alert('Unable to get download URL');
+      } else { window.open(signed.signedUrl, '_blank'); }
+    }catch(e){ alert('Download failed: '+e.message); }
+    dl.disabled = false; dl.textContent='Download';
+  };
+
+  const copyLink = document.createElement('button'); copyLink.className='btn'; copyLink.textContent='Copy link';
+  copyLink.onclick = async ()=>{
+    try{
+      const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(name);
+      const publicUrl = pub?.publicUrl || (pub && pub.publicUrl);
+      if(publicUrl){ await navigator.clipboard.writeText(publicUrl); alert('Public URL copied to clipboard'); return; }
+      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(name, 60);
+      if(signed?.signedUrl){ await navigator.clipboard.writeText(signed.signedUrl); alert('Signed URL copied (60s)'); }
+      else alert('Could not create link');
+    }catch(e){ alert('Could not copy link: '+e.message); }
+  };
+
+  const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
+  del.onclick = async ()=>{
+    if(!confirm('Delete "'+name+'" from remote bucket?')) return;
+    const { error } = await supabase.storage.from(BUCKET).remove([name]);
+    if(error){ alert('Delete failed: '+error.message); console.error(error); } else { alert('Deleted '+name); renderFileList(); }
+  };
+
+  actions.appendChild(dl); actions.appendChild(copyLink); actions.appendChild(del);
+  row.appendChild(icon); row.appendChild(meta); row.appendChild(actions);
+  return row;
+}
+
+async function renderFileList(){
+  fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Loading files…</div>';
+  // try multiple list strategies in case of subtle API differences
+  let res;
+  try{ res = await supabase.storage.from(BUCKET).list('', {limit: 1000}); }
+  catch(e){ console.warn('list with empty path failed', e); }
+  if(!res || res.error) {
+    try{ res = await supabase.storage.from(BUCKET).list('/', {limit: 1000}); }catch(e){ console.warn('list with slash failed', e); }
+  }
+  if(!res || res.error){
+    console.error(res?.error || 'Unknown list error');
+    fileListEl.innerHTML = `<div class="small" style="padding:8px;color:var(--muted)">Could not fetch file list: ${res?.error?.message || 'unknown'}</div>`;
+    // if we have localRecent items, show them so user sees uploads
+    if(localRecent.length){ fileListEl.innerHTML += '<div class="small" style="padding:8px;color:var(--muted)">Showing recent uploads (local)</div>'; localRecent.slice().reverse().forEach(n => { fileListEl.appendChild(makeRow({name: n, local:true})); }); }
+    return;
+  }
+
+  const data = res.data || [];
+  if(!data.length){
+    fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">No files in bucket yet.</div>';
+    // still show local recent while list is empty
+    if(localRecent.length){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Recent uploads (local)</div>'; localRecent.slice().reverse().forEach(n => fileListEl.appendChild(makeRow({name:n,local:true}))); }
+    return;
+  }
 
   fileListEl.innerHTML = '';
-  // sort newest first (list may not include created_at depending on vector)
-  data.sort((a,b)=> new Date(b.created_at || 0) - new Date(a.created_at || 0));
-
-  for(const f of data){ const row = document.createElement('div'); row.className='file-row';
-    const icon = document.createElement('div'); icon.className='f-icon'; icon.textContent = iconForName(f.name);
-    const meta = document.createElement('div'); meta.className='f-meta';
-    const name = document.createElement('div'); name.className='fname'; name.textContent = f.name;
-    const info = document.createElement('div'); info.className='fmeta'; info.textContent = `${fmtBytes(f.size||0)} • ${f.name}`;
-    meta.appendChild(name); meta.appendChild(info);
-
-    const actions = document.createElement('div'); actions.className='f-actions';
-    // download (try signed url then public)
-    const dl = document.createElement('button'); dl.className='btn'; dl.textContent='Download'; dl.onclick = async ()=>{
-      dl.disabled = true; dl.textContent='Preparing…';
-      try{
-        // try createSignedUrl (good for private buckets)
-        const { data: signed, error: signErr } = await supabase.storage.from(BUCKET).createSignedUrl(f.name, 60);
-        if(signErr){ console.warn('signed url error, trying public', signErr); const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(f.name); window.open(pub.publicUrl, '_blank'); }
-        else { window.open(signed.signedUrl, '_blank'); }
-      }catch(e){ alert('Download failed: '+e.message) }
-      dl.disabled = false; dl.textContent='Download';
-    };
-
-    const copyLink = document.createElement('button'); copyLink.className='btn'; copyLink.textContent='Copy link'; copyLink.onclick = async ()=>{
-      try{
-        const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(f.name);
-        if(pub && pub.publicUrl){ await navigator.clipboard.writeText(pub.publicUrl); alert('Public URL copied to clipboard'); }
-        else {
-          const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(f.name, 60);
-          await navigator.clipboard.writeText(signed.signedUrl);
-          alert('Signed URL copied to clipboard (60s)');
-        }
-      }catch(e){ alert('Could not copy link: '+e.message) }
-    };
-
-    const del = document.createElement('button'); del.className='btn'; del.textContent='Delete'; del.onclick = async ()=>{
-      if(!confirm('Delete "'+f.name+'" from remote bucket?')) return;
-      const { data: delRes, error: delErr } = await supabase.storage.from(BUCKET).remove([f.name]);
-      if(delErr){ alert('Delete failed: '+delErr.message); console.error(delErr); } else { alert('Deleted '+f.name); renderFileList(); }
-    };
-
-    actions.appendChild(dl); actions.appendChild(copyLink); actions.appendChild(del);
-    row.appendChild(icon); row.appendChild(meta); row.appendChild(actions);
+  // attempt to sort by name (our uploads use timestamp prefix) so newest first
+  data.sort((a,b)=> { try{ return b.name.localeCompare(a.name); }catch(e){return 0;} });
+  data.forEach(f => {
+    const row = makeRow({name: f.name, size: f.size, created_at: f.created_at});
     fileListEl.appendChild(row);
+  });
+}
+
+// upload files and show placeholder while uploading
+async function uploadFiles(files){ if(!files || files.length===0) return; uploadBtn.disabled = true; uploadBtn.textContent = 'Uploading…';
+  for(const f of files){ const name = `${Date.now()}_${f.name}`;
+    try{
+      // push to localRecent so UI can show it if listing fails
+      localRecent.push(name);
+      const { data, error } = await supabase.storage.from(BUCKET).upload(name, f, { cacheControl: '3600', upsert: false });
+      if(error){ console.error('upload error', error); alert('Upload failed: '+error.message); }
+    }catch(err){ console.error('upload exception', err); alert('Upload failed: '+err.message); }
   }
-}
+  await renderFileList(); uploadBtn.disabled = false; uploadBtn.textContent = 'Upload Selected'; alert('Upload(s) complete'); }
 
-// upload
-async function uploadFiles(files){ if(!files || files.length===0) return; for(const f of files){ const name = `${Date.now()}_${f.name}`; const { data, error } = await supabase.storage.from(BUCKET).upload(name, f, { cacheControl: '3600', upsert: false }); if(error){ console.error('upload error', error); alert('Upload failed: '+error.message); } }
-  await renderFileList(); alert('Upload(s) complete'); }
+// clear all files (dangerous)
+async function clearAllRemoteFiles(){ if(!confirm('Delete ALL files in the remote bucket? This cannot be undone.')) return; const { data, error } = await supabase.storage.from(BUCKET).list('', {limit:1000}); if(error){ alert('Could not list files: '+error.message); return } const paths = data.map(d=>d.name); if(paths.length===0){ alert('No files to delete'); return } const { error: delErr } = await supabase.storage.from(BUCKET).remove(paths); if(delErr) alert('Error deleting files: '+delErr.message); else { alert('All files deleted'); renderFileList(); } }
 
-// clear all files (dangerous) - removes everything in bucket root
-async function clearAllRemoteFiles(){ if(!confirm('Delete ALL files in the remote bucket? This cannot be undone.')) return; const { data, error } = await supabase.storage.from(BUCKET).list('', {limit:1000}); if(error){ alert('Could not list files: '+error.message); return }
-  const paths = data.map(d=>d.name);
-  if(paths.length===0){ alert('No files to delete'); return }
-  const { error: delErr } = await supabase.storage.from(BUCKET).remove(paths);
-  if(delErr) alert('Error deleting files: '+delErr.message); else { alert('All files deleted'); renderFileList(); }
-}
-
-// --- Text save/load ---
-async function saveTextRemote(text){ const { error } = await supabase.from('shared_text').update({ content: text }).eq('id', TEXT_TABLE_ID);
-  if(error){ alert('Save failed: '+error.message); console.error(error); } else { alert('Text saved to Supabase'); remoteSnippet.textContent = text.slice(0,200) || '(empty)'; }
-}
+// text functions
+async function saveTextRemote(text){ const { error } = await supabase.from('shared_text').update({ content: text }).eq('id', TEXT_TABLE_ID); if(error){ alert('Save failed: '+error.message); console.error(error); } else { alert('Text saved to Supabase'); remoteSnippet.textContent = text.slice(0,200) || '(empty)'; } }
 async function loadTextRemote(){ const { data, error } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single(); if(error){ alert('Load failed: '+error.message); console.error(error); } else { textArea.value = data.content || ''; remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; alert('Text loaded'); } }
 async function clearTextRemote(){ if(!confirm('Clear remote text at id=1?')) return; const { error } = await supabase.from('shared_text').update({ content: '' }).eq('id', TEXT_TABLE_ID); if(error) alert('Clear failed: '+error.message); else { alert('Remote text cleared'); remoteSnippet.textContent='(empty)'; } }
 
-// --- events ---
+// events
 fileInput.addEventListener('change', (e)=>{ selectedFiles = Array.from(e.target.files); if(selectedFiles.length) uploadFiles(selectedFiles); fileInput.value=''; });
 uploadBtn.addEventListener('click', ()=>{ if(selectedFiles.length===0) return alert('Pick files first or drag & drop'); uploadFiles(selectedFiles); });
 refreshBtn.addEventListener('click', renderFileList);
 clearFilesBtn.addEventListener('click', clearAllRemoteFiles);
-
-// drag & drop
 ['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.classList.add('drag'); }));
 ['dragleave','drop'].forEach(ev=> drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.classList.remove('drag'); }));
 drop.addEventListener('drop', async (e)=>{ e.preventDefault(); const files = Array.from(e.dataTransfer.files || []); if(files.length) await uploadFiles(files); });
@@ -229,9 +248,7 @@ clearTextLocalBtn.addEventListener('click', ()=>{ if(confirm('Clear local text a
 
 // init
 renderFileList();
-// try to preload remote text snippet (non-invasive)
 (async ()=>{ try{ const { data } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single(); if(data) remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; }catch(e){ console.warn('no preview'); } })();
-
 </script>
 </body>
 </html>
