@@ -2,223 +2,235 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QuickBridge — Phone ↔ Computer Transfer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>QuickBridge — Supabase File Bridge</title>
+  <meta name="color-scheme" content="dark">
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    :root{--bg:#0b0b10;--card:#0f1116;--muted:#9aa0a6;--accent:#ffd166;--glass:rgba(255,255,255,0.03);--radius:14px}
-    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,#07070a 0%, #0b0b10 100%);color:#e6eef3}
-    .container{max-width:1100px;margin:36px auto;padding:28px;}
-    header{display:flex;align-items:center;gap:18px}
-    .logo{width:56px;height:56px;background:linear-gradient(135deg,#ffd166,#ff6b6b);border-radius:12px;display:grid;place-items:center;font-weight:700;color:#0b0b10}
-    h1{margin:0;font-size:20px}
-    p.lead{margin:4px 0 0;color:var(--muted);font-size:13px}
+    /* Fluid animated background */
+    :root{--bg1:#071025;--bg2:#08121a;--glass:rgba(255,255,255,0.06);--muted:#b6c2cc;--accent:#ffd166;--radius:20px}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#ecf6ff}
+    html,body{height:100%;margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2));overflow-y:auto}
+    /* animated gradient shapes */
+    .bg-blob{position:fixed;inset:-20% -10% auto auto;z-index:-2;filter:blur(80px);opacity:0.9;transform:translateZ(0)}
+    .blob-1{width:60vmax;height:60vmax;background:radial-gradient(circle at 30% 30%, #ff8a8a, transparent 25%), radial-gradient(circle at 70% 70%, #ffd16655, transparent 20%);animation:float 12s ease-in-out infinite}
+    .blob-2{position:fixed;right:-10%;bottom:-10%;width:50vmax;height:50vmax;background:radial-gradient(circle at 20% 30%, #6be0ff55, transparent 20%), radial-gradient(circle at 80% 70%, #a89bff55, transparent 25%);filter:blur(100px);animation:float 18s ease-in-out infinite reverse}
+    @keyframes float{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8vh) rotate(6deg)}100%{transform:translateY(0) rotate(0)}}
 
-    .grid{display:grid;grid-template-columns:1fr 420px;gap:20px;margin-top:22px}
-    .card{background:var(--card);border-radius:var(--radius);padding:18px;box-shadow:0 6px 30px rgba(2,6,23,0.6);}
+    .app{max-width:1100px;margin:36px auto;padding:20px;display:grid;grid-template-columns:1fr 420px;gap:20px}
+    @media (max-width:920px){.app{grid-template-columns:1fr;padding:16px;margin:18px auto}}
 
-    /* Upload area */
-    .drop{border:2px dashed rgba(255,255,255,0.06);padding:28px;border-radius:12px;min-height:220px;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;background:linear-gradient(180deg,transparent,rgba(255,255,255,0.01))}
-    .drop.dragover{border-color:rgba(255,255,255,0.14);background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.02))}
-    .drop .big{font-size:15px;color:var(--muted)}
-    .controls{display:flex;gap:10px}
-    button{background:var(--glass);border:1px solid rgba(255,255,255,0.03);color:inherit;padding:8px 12px;border-radius:9px;cursor:pointer}
-    .btn-primary{background:linear-gradient(90deg,#ffd166,#ff7b7b);color:#0b0b10;border:none}
+    /* frosted glass cards */
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:24px;padding:18px;backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.04)}
+    header{display:flex;gap:14px;align-items:center;margin-bottom:12px}
+    .logo{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#ffd166,#ff7b7b);display:grid;place-items:center;font-weight:800;color:#061018}
+    h1{margin:0;font-size:18px}
+    p.lead{margin:2px 0 0;color:var(--muted);font-size:13px}
 
-    /* File list */
-    .file-list{margin-top:14px;display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding-right:6px}
-    .file-row{display:flex;gap:12px;align-items:center;padding:8px;border-radius:10px;background:rgba(255,255,255,0.01);}
-    .f-icon{width:44px;height:44px;border-radius:8px;display:grid;place-items:center;background:rgba(0,0,0,0.25);font-size:14px}
+    /* upload area */
+    .drop{min-height:220px;border-radius:16px;border:1px dashed rgba(255,255,255,0.05);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px}
+    .drop.drag{border-color:rgba(255,255,255,0.12)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{padding:10px 14px;border-radius:12px;border:none;background:rgba(255,255,255,0.04);color:inherit;cursor:pointer}
+    .btn.primary{background:linear-gradient(90deg,#ffd166,#ff7b7b);color:#061018;font-weight:700}
+
+    /* file list */
+    .file-list{margin-top:14px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto;padding-right:6px}
+    .file-row{display:flex;gap:12px;align-items:center;padding:10px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));}
+    .f-icon{width:56px;height:56px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,0.25);font-size:20px}
     .f-meta{flex:1;min-width:0}
-    .fname{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .fmeta{font-size:12px;color:var(--muted)}
+    .fname{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .fmeta{font-size:12px;color:var(--muted);margin-top:4px}
     .f-actions{display:flex;gap:8px}
 
-    /* Right column */
+    /* right column */
     .box{display:flex;flex-direction:column;gap:12px}
-    textarea{width:100%;min-height:160px;background:transparent;border:1px solid rgba(255,255,255,0.03);padding:12px;border-radius:10px;color:inherit;font-size:14px}
-    .mini{font-size:13px;color:var(--muted)}
-    .row{display:flex;gap:10px;align-items:center}
+    textarea{width:100%;min-height:160px;background:transparent;border-radius:12px;border:1px solid rgba(255,255,255,0.04);padding:12px;color:inherit;font-size:14px}
+    .small{font-size:13px;color:var(--muted)}
 
-    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
-
-    /* small */
-    @media (max-width:980px){.grid{grid-template-columns:1fr;}
-      .container{padding:18px}
-    }
+    footer{text-align:center;color:var(--muted);margin-top:18px;font-size:13px}
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div class="logo">QB</div>
-      <div>
-        <h1>QuickBridge</h1>
-        <p class="lead">Easily move files & text between your phone and computer — drag & drop, copy, download, or scan a QR.</p>
+  <div class="bg-blob blob-1"></div>
+  <div class="bg-blob blob-2"></div>
+
+  <div class="app">
+    <section class="card">
+      <header>
+        <div class="logo">QB</div>
+        <div>
+          <h1>QuickBridge</h1>
+          <p class="lead">Seamless phone ↔ computer file & text bridge using Supabase Storage.</p>
+        </div>
+      </header>
+
+      <div id="drop" class="drop">
+        <div style="text-align:center">
+          <div style="font-weight:700;font-size:16px">Upload files</div>
+          <div class="small" style="margin-top:6px">Drag & drop or choose files. Files appear below and are downloadable on any device with this page open.</div>
+        </div>
+
+        <div class="controls">
+          <label class="btn" style="display:inline-flex;align-items:center;gap:8px">
+            <input id="fileInput" type="file" multiple style="display:none">
+            <span>Choose files</span>
+          </label>
+          <button id="uploadBtn" class="btn primary">Upload Selected</button>
+          <button id="refreshBtn" class="btn">Refresh list</button>
+          <button id="clearFilesBtn" class="btn">Clear remote files</button>
+        </div>
       </div>
-    </header>
 
-    <main class="grid">
-      <section class="card">
-        <div id="drop" class="drop">
-          <div class="big">Drag & drop files here</div>
-          <div class="mini">or</div>
-          <div class="controls">
-            <label style="display:inline-block">
-              <input id="fileInput" type="file" multiple style="display:none"> 
-              <button>Choose files</button>
-            </label>
-            <button id="clearAll">Clear all</button>
-          </div>
-          <div class="mini">Tip: open this page on both devices to download files to the other device after transferring (see how below).</div>
+      <div class="file-list card" id="fileList" style="margin-top:14px;padding:12px">
+        <!-- files render here -->
+      </div>
+
+    </section>
+
+    <aside class="card box">
+      <div>
+        <div class="small" style="font-weight:700">Quick text bridge</div>
+        <div class="small">Save text to Supabase and load it on other devices. Both local and remote clear available.</div>
+        <textarea id="textArea" placeholder="Type text to sync..."></textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="saveText" class="btn primary">Save to Supabase</button>
+          <button id="loadText" class="btn">Load from Supabase</button>
+          <button id="clearTextRemote" class="btn">Clear remote</button>
+          <button id="clearTextLocal" class="btn">Clear local</button>
         </div>
+        <div id="savedPreview" class="small" style="margin-top:8px;word-break:break-word;color:var(--muted)">Remote text: <em id="remoteSnippet">(not loaded yet)</em></div>
+      </div>
 
-        <div class="file-list card" id="fileList" style="margin-top:14px;padding:12px;background:transparent;border-radius:12px">
-          <!-- dynamic -->
-        </div>
-      </section>
-
-      <aside class="card">
-        <div class="box">
-          <div>
-            <div class="mini">Quick text bridge</div>
-            <textarea id="textArea" placeholder="Paste text here — tap 'Save' then open this page on your other device and press 'Load' to retrieve it."></textarea>
-            <div class="row">
-              <button id="saveText">Save</button>
-              <button id="loadText">Load</button>
-              <button id="copyText">Copy to clipboard</button>
-              <button id="qrText">Generate QR</button>
-            </div>
-            <div id="qrWrap" style="display:none;margin-top:10px;">
-              <div class="mini">Scan this QR on another device:</div>
-              <canvas id="qrCanvas" style="margin-top:8px;border-radius:8px;background:white;padding:6px"></canvas>
-            </div>
-          </div>
-
-          <div>
-            <div class="mini">Saved items (persisted in your browser)</div>
-            <div id="savedList" style="max-height:150px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
-          </div>
-
-          <div style="margin-top:6px;color:var(--muted);font-size:12px">Notes: Files are stored in your browser (IndexedDB). To transfer between devices, open this same page on the other device and use "Download" or scan the QR. For large files or constant sync you'll want a tiny cloud backend (I can recommend free options — which kind of cloud DB do you want?).</div>
-        </div>
-      </aside>
-    </main>
-
-    <footer>Made for quick transfers • Files kept locally unless you choose to export</footer>
+      <div class="small" style="color:var(--muted);margin-top:6px">Notes: Files are uploaded to your <code>quickbridge</code> bucket. If your bucket is private, temporary signed URLs will be created for downloads. For persistent public sharing consider making the bucket public in Supabase console.</div>
+    </aside>
   </div>
 
+  <footer></footer>
+
 <script>
-// Minimal app: drag & drop + store files in IndexedDB, list files with download & copy options.
-// NOTE: This is client-only. To sync between devices you can either open this page on the other device and download files, or use a cloud DB/backend.
+// Supabase config (from user)
+const SUPABASE_URL = 'https://nuyctnaioepalgytinwd.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51eWN0bmFpb2VwYWxneXRpbndkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3NjgzMDYsImV4cCI6MjA3MDM0NDMwNn0.rZ_IQR8EqVaMIuM3nSpzY5bIXRREXRaClcQS7Tmw6yI';
+const BUCKET = 'quickbridge';
+const TEXT_TABLE_ID = 1; // id row in shared_text
 
-// ---- tiny IndexedDB helper ----
-function idbOpen(name='quickbridge', store='files'){
-  return new Promise((res,rej)=>{
-    const r = indexedDB.open(name,1);
-    r.onupgradeneeded = ()=>{ r.result.createObjectStore(store,{keyPath:'id'}); };
-    r.onsuccess = ()=>res(r.result);
-    r.onerror = ()=>rej(r.error);
-  })
-}
-async function idbPut(obj){ const db = await idbOpen(); const tx = db.transaction('files','readwrite'); tx.objectStore('files').put(obj); return new Promise((r,rej)=>{tx.oncomplete=()=>r(true);tx.onerror=()=>rej(tx.error)}); }
-async function idbGetAll(){ const db = await idbOpen(); const tx = db.transaction('files','readonly'); const req = tx.objectStore('files').getAll(); return new Promise((r,rej)=>{req.onsuccess=()=>r(req.result);req.onerror=()=>rej(req.error)}); }
-async function idbDelete(id){ const db = await idbOpen(); const tx = db.transaction('files','readwrite'); tx.objectStore('files').delete(id); return new Promise((r,rej)=>{tx.oncomplete=()=>r(true);tx.onerror=()=>rej(tx.error)}); }
-async function idbClear(){ const db = await idbOpen(); const tx = db.transaction('files','readwrite'); tx.objectStore('files').clear(); return new Promise((r,rej)=>{tx.oncomplete=()=>r(true);tx.onerror=()=>rej(tx.error)}); }
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ---- app logic ----
-const drop = document.getElementById('drop');
+// UI refs
 const fileInput = document.getElementById('fileInput');
-const fileList = document.getElementById('fileList');
-const savedList = document.getElementById('savedList');
-const clearAllBtn = document.getElementById('clearAll');
+const uploadBtn = document.getElementById('uploadBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+const clearFilesBtn = document.getElementById('clearFilesBtn');
+const fileListEl = document.getElementById('fileList');
+const drop = document.getElementById('drop');
 
-function iconForName(name){ const ext = (name.split('.').pop()||'').toLowerCase(); if(['png','jpg','jpeg','gif','webp','svg'].includes(ext)) return '🖼️';
- if(['mp3','wav','flac','m4a','ogg'].includes(ext)) return '🎵';
- if(['mp4','mov','webm','mkv'].includes(ext)) return '🎬';
- if(['pdf'].includes(ext)) return '📄';
- if(['zip','rar','7z','gz'].includes(ext)) return '🗜️';
- if(['doc','docx','odt'].includes(ext)) return '📃';
- if(['txt','md','json','csv'].includes(ext)) return '📄';
- return '📁'; }
+const textArea = document.getElementById('textArea');
+const saveTextBtn = document.getElementById('saveText');
+const loadTextBtn = document.getElementById('loadText');
+const clearTextRemoteBtn = document.getElementById('clearTextRemote');
+const clearTextLocalBtn = document.getElementById('clearTextLocal');
+const remoteSnippet = document.getElementById('remoteSnippet');
 
-function makeFileRow(item){ const row = document.createElement('div'); row.className='file-row';
-  const icon = document.createElement('div'); icon.className='f-icon'; icon.textContent = iconForName(item.name);
-  const meta = document.createElement('div'); meta.className='f-meta';
-  const fname = document.createElement('div'); fname.className='fname'; fname.textContent = item.name;
-  const fmeta = document.createElement('div'); fmeta.className='fmeta'; fmeta.textContent = `${Math.round(item.size/1024)} KB — ${new Date(item.added).toLocaleString()}`;
-  meta.appendChild(fname); meta.appendChild(fmeta);
+let selectedFiles = [];
 
-  const actions = document.createElement('div'); actions.className='f-actions';
-  const dl = document.createElement('button'); dl.textContent='Download'; dl.onclick = ()=>{ const blob = new Blob([item.data], {type:item.type}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=item.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),5000); };
-  const copyBtn = document.createElement('button'); copyBtn.textContent='Copy'; copyBtn.onclick = async ()=>{
-    try{
-      const blob = new Blob([item.data], {type:item.type});
-      // try clipboard write (only works for certain types and secure contexts)
-      if(navigator.clipboard && navigator.clipboard.write){
-        const clipboardItem = new ClipboardItem({[item.type]: blob});
-        await navigator.clipboard.write([clipboardItem]);
-        alert('File copied to system clipboard (if supported by your browser). Paste on the other device/app.');
-      } else {
-        // fallback: download
-        alert('Clipboard write not supported. Use Download button to transfer or open this page on the other device.');
-      }
-    }catch(e){ alert('Could not copy file to clipboard: ' + e.message); }
-  };
-  const del = document.createElement('button'); del.textContent='Delete'; del.onclick = async ()=>{ if(confirm('Delete this saved file?')){ await idbDelete(item.id); renderAll(); }};
-  actions.appendChild(dl); actions.appendChild(copyBtn); actions.appendChild(del);
+// --- Helpers ---
+function fmtBytes(bytes){ if(bytes<1024) return bytes+' B'; if(bytes<1024*1024) return Math.round(bytes/1024)+' KB'; return Math.round(bytes/(1024*1024))+' MB'; }
+function iconForName(name){ const ext=(name.split('.').pop()||'').toLowerCase(); if(['png','jpg','jpeg','gif','webp','svg'].includes(ext)) return '🖼️'; if(['mp3','wav','flac','m4a','ogg'].includes(ext)) return '🎵'; if(['mp4','mov','webm','mkv'].includes(ext)) return '🎬'; if(['pdf','txt','md','json','csv'].includes(ext)) return '📄'; if(['zip','rar','7z'].includes(ext)) return '🗜️'; return '📁'; }
 
-  row.appendChild(icon); row.appendChild(meta); row.appendChild(actions);
-  return row;
-}
+// show files in UI
+async function renderFileList(){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Loading files…</div>';
+  const { data, error } = await supabase.storage.from(BUCKET).list('', {limit: 100, sortBy: { column: 'created_at', order: 'desc'} });
+  if(error){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Error fetching files: '+error.message+'</div>'; console.error(error); return }
+  if(!data || data.length===0){ fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">No files in bucket yet.</div>'; return }
 
-async function renderAll(){ fileList.innerHTML=''; const all = await idbGetAll(); if(all.length===0){ fileList.innerHTML='<div class="mini" style="padding:12px;color:var(--muted)">No files saved. Drop files or choose files above.</div>'; } else {
-    all.sort((a,b)=>b.added-a.added).forEach(it=> fileList.appendChild(makeFileRow(it)));
+  fileListEl.innerHTML = '';
+  // sort newest first (list may not include created_at depending on vector)
+  data.sort((a,b)=> new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+  for(const f of data){ const row = document.createElement('div'); row.className='file-row';
+    const icon = document.createElement('div'); icon.className='f-icon'; icon.textContent = iconForName(f.name);
+    const meta = document.createElement('div'); meta.className='f-meta';
+    const name = document.createElement('div'); name.className='fname'; name.textContent = f.name;
+    const info = document.createElement('div'); info.className='fmeta'; info.textContent = `${fmtBytes(f.size||0)} • ${f.name}`;
+    meta.appendChild(name); meta.appendChild(info);
+
+    const actions = document.createElement('div'); actions.className='f-actions';
+    // download (try signed url then public)
+    const dl = document.createElement('button'); dl.className='btn'; dl.textContent='Download'; dl.onclick = async ()=>{
+      dl.disabled = true; dl.textContent='Preparing…';
+      try{
+        // try createSignedUrl (good for private buckets)
+        const { data: signed, error: signErr } = await supabase.storage.from(BUCKET).createSignedUrl(f.name, 60);
+        if(signErr){ console.warn('signed url error, trying public', signErr); const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(f.name); window.open(pub.publicUrl, '_blank'); }
+        else { window.open(signed.signedUrl, '_blank'); }
+      }catch(e){ alert('Download failed: '+e.message) }
+      dl.disabled = false; dl.textContent='Download';
+    };
+
+    const copyLink = document.createElement('button'); copyLink.className='btn'; copyLink.textContent='Copy link'; copyLink.onclick = async ()=>{
+      try{
+        const { data: pub } = await supabase.storage.from(BUCKET).getPublicUrl(f.name);
+        if(pub && pub.publicUrl){ await navigator.clipboard.writeText(pub.publicUrl); alert('Public URL copied to clipboard'); }
+        else {
+          const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(f.name, 60);
+          await navigator.clipboard.writeText(signed.signedUrl);
+          alert('Signed URL copied to clipboard (60s)');
+        }
+      }catch(e){ alert('Could not copy link: '+e.message) }
+    };
+
+    const del = document.createElement('button'); del.className='btn'; del.textContent='Delete'; del.onclick = async ()=>{
+      if(!confirm('Delete "'+f.name+'" from remote bucket?')) return;
+      const { data: delRes, error: delErr } = await supabase.storage.from(BUCKET).remove([f.name]);
+      if(delErr){ alert('Delete failed: '+delErr.message); console.error(delErr); } else { alert('Deleted '+f.name); renderFileList(); }
+    };
+
+    actions.appendChild(dl); actions.appendChild(copyLink); actions.appendChild(del);
+    row.appendChild(icon); row.appendChild(meta); row.appendChild(actions);
+    fileListEl.appendChild(row);
   }
-  // saved list (compact)
-  savedList.innerHTML=''; const text = localStorage.getItem('qb_text'); const tdiv = document.createElement('div'); tdiv.className='file-row'; tdiv.style.padding='8px'; tdiv.innerHTML=`<div style="flex:1"><div class="fname">Saved text</div><div class="fmeta">${text?text.slice(0,80):'<empty>'}</div></div>`; const ld = document.createElement('button'); ld.textContent='Load'; ld.onclick = ()=>{ document.getElementById('textArea').value = text||''; }; const cp = document.createElement('button'); cp.textContent='Copy'; cp.onclick = ()=>{ navigator.clipboard.writeText(text||''); alert('Copied text to clipboard'); };
-  const clr = document.createElement('button'); clr.textContent='Clear'; clr.onclick = ()=>{ if(confirm('Clear saved text?')){ localStorage.removeItem('qb_text'); renderAll(); }};
-  const actions = document.createElement('div'); actions.className='f-actions'; actions.appendChild(ld); actions.appendChild(cp); actions.appendChild(clr);
-  tdiv.appendChild(actions); savedList.appendChild(tdiv);
 }
 
-// handle file add
-async function addFiles(files){ for(const f of files){ const arr = await f.arrayBuffer(); const id = crypto.randomUUID(); const obj = {id, name:f.name, type:f.type||'application/octet-stream', size:arr.byteLength, data:arr, added:Date.now()}; await idbPut(obj); }
-  renderAll(); }
+// upload
+async function uploadFiles(files){ if(!files || files.length===0) return; for(const f of files){ const name = `${Date.now()}_${f.name}`; const { data, error } = await supabase.storage.from(BUCKET).upload(name, f, { cacheControl: '3600', upsert: false }); if(error){ console.error('upload error', error); alert('Upload failed: '+error.message); } }
+  await renderFileList(); alert('Upload(s) complete'); }
+
+// clear all files (dangerous) - removes everything in bucket root
+async function clearAllRemoteFiles(){ if(!confirm('Delete ALL files in the remote bucket? This cannot be undone.')) return; const { data, error } = await supabase.storage.from(BUCKET).list('', {limit:1000}); if(error){ alert('Could not list files: '+error.message); return }
+  const paths = data.map(d=>d.name);
+  if(paths.length===0){ alert('No files to delete'); return }
+  const { error: delErr } = await supabase.storage.from(BUCKET).remove(paths);
+  if(delErr) alert('Error deleting files: '+delErr.message); else { alert('All files deleted'); renderFileList(); }
+}
+
+// --- Text save/load ---
+async function saveTextRemote(text){ const { error } = await supabase.from('shared_text').update({ content: text }).eq('id', TEXT_TABLE_ID);
+  if(error){ alert('Save failed: '+error.message); console.error(error); } else { alert('Text saved to Supabase'); remoteSnippet.textContent = text.slice(0,200) || '(empty)'; }
+}
+async function loadTextRemote(){ const { data, error } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single(); if(error){ alert('Load failed: '+error.message); console.error(error); } else { textArea.value = data.content || ''; remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; alert('Text loaded'); } }
+async function clearTextRemote(){ if(!confirm('Clear remote text at id=1?')) return; const { error } = await supabase.from('shared_text').update({ content: '' }).eq('id', TEXT_TABLE_ID); if(error) alert('Clear failed: '+error.message); else { alert('Remote text cleared'); remoteSnippet.textContent='(empty)'; } }
+
+// --- events ---
+fileInput.addEventListener('change', (e)=>{ selectedFiles = Array.from(e.target.files); if(selectedFiles.length) uploadFiles(selectedFiles); fileInput.value=''; });
+uploadBtn.addEventListener('click', ()=>{ if(selectedFiles.length===0) return alert('Pick files first or drag & drop'); uploadFiles(selectedFiles); });
+refreshBtn.addEventListener('click', renderFileList);
+clearFilesBtn.addEventListener('click', clearAllRemoteFiles);
 
 // drag & drop
-['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev,e=>{ e.preventDefault(); e.stopPropagation(); drop.classList.add('dragover'); }));
-['dragleave','drop'].forEach(ev=> drop.addEventListener(ev,e=>{ e.preventDefault(); e.stopPropagation(); drop.classList.remove('dragover'); }));
-drop.addEventListener('drop', async (e)=>{ const files = Array.from(e.dataTransfer.files); if(files.length) await addFiles(files); });
-fileInput.addEventListener('change', async(e)=>{ if(e.target.files.length) await addFiles(Array.from(e.target.files)); fileInput.value=''; });
-clearAllBtn.addEventListener('click', async ()=>{ if(confirm('Clear all saved files?')){ await idbClear(); renderAll(); }});
+['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev=> drop.addEventListener(ev, (e)=>{ e.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', async (e)=>{ e.preventDefault(); const files = Array.from(e.dataTransfer.files || []); if(files.length) await uploadFiles(files); });
 
-// text area actions
-const textArea = document.getElementById('textArea');
-document.getElementById('saveText').addEventListener('click', ()=>{ localStorage.setItem('qb_text', textArea.value); renderAll(); alert('Text saved locally — open this page on the other device and press Load to retrieve it.'); });
-
-document.getElementById('loadText').addEventListener('click', ()=>{ const t = localStorage.getItem('qb_text')||''; textArea.value = t; alert('Loaded text from local storage'); });
-
-document.getElementById('copyText').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(textArea.value); alert('Text copied to clipboard'); }catch(e){ alert('Failed to copy: ' + e.message); } });
-
-// QR generation for text (tiny QR implementation: using library-free method - we will encode text into a data: URL and draw a QR using canvas fallback: show the text as blob link and small QR via external library is not allowed offline. We provide a basic fallback: display text as downloadable file and a data-URI preview.)
-const qrWrap = document.getElementById('qrWrap'); const qrCanvas = document.getElementById('qrCanvas');
-
-document.getElementById('qrText').addEventListener('click', ()=>{
-  const text = textArea.value.trim(); if(!text){ alert('Enter text first'); return; }
-  // fallback: draw a simple text preview on the canvas and provide a downloadable TXT — real QR requires external lib; keep simple but useful.
-  qrWrap.style.display='block'; const ctx = qrCanvas.getContext('2d'); qrCanvas.width = 300; qrCanvas.height = 300; ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,qrCanvas.width,qrCanvas.height); ctx.fillStyle = '#000000'; ctx.font = '12px monospace'; const lines = text.split('\n'); let y=18; for(const line of lines.slice(0,18)){ ctx.fillText(line.slice(0,40),8,y); y+=14; }
-  // create download link below canvas
-  let link = document.getElementById('qrDownloadLink'); if(link) link.remove(); link = document.createElement('a'); link.id='qrDownloadLink'; link.textContent='Download text file'; const blob = new Blob([text],{type:'text/plain'}); link.href = URL.createObjectURL(blob); link.download='quickbridge.txt'; link.style.display='inline-block'; link.style.marginTop='8px'; qrWrap.appendChild(link);
-});
+saveTextBtn.addEventListener('click', ()=> saveTextRemote(textArea.value));
+loadTextBtn.addEventListener('click', loadTextRemote);
+clearTextRemoteBtn.addEventListener('click', clearTextRemote);
+clearTextLocalBtn.addEventListener('click', ()=>{ if(confirm('Clear local text area?')){ textArea.value=''; alert('Local text cleared'); }});
 
 // init
-renderAll();
-
-// On first load, show short instructions if coming from mobile
-if(/Mobi|Android/i.test(navigator.userAgent)){
-  console.log('mobile');
-}
+renderFileList();
+// try to preload remote text snippet (non-invasive)
+(async ()=>{ try{ const { data } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single(); if(data) remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; }catch(e){ console.warn('no preview'); } })();
 
 </script>
 </body>
