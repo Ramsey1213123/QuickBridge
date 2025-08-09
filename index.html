@@ -1,234 +1,168 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>QuickBridge — Supabase File Bridge (Fixed)</title>
-  <meta name="color-scheme" content="dark">
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <style>
-    :root{--bg1:#071025;--bg2:#08121a;--glass:rgba(255,255,255,0.06);--muted:#b6c2cc;--accent:#ffd166;--radius:20px}
-    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#ecf6ff}
-    html,body{height:100%;margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2));overflow-y:auto}
-    .bg-blob{position:fixed;inset:-20% -10% auto auto;z-index:-2;filter:blur(80px);opacity:0.9;transform:translateZ(0)}
-    .blob-1{width:60vmax;height:60vmax;background:radial-gradient(circle at 30% 30%, #ff8a8a, transparent 25%), radial-gradient(circle at 70% 70%, #ffd16655, transparent 20%);animation:float 12s ease-in-out infinite}
-    .blob-2{position:fixed;right:-10%;bottom:-10%;width:50vmax;height:50vmax;background:radial-gradient(circle at 20% 30%, #6be0ff55, transparent 20%), radial-gradient(circle at 80% 70%, #a89bff55, transparent 25%);filter:blur(100px);animation:float 18s ease-in-out infinite reverse}
-    @keyframes float{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8vh) rotate(6deg)}100%{transform:translateY(0) rotate(0)}}
-
-    .app{max-width:1100px;margin:36px auto;padding:20px;display:grid;grid-template-columns:1fr 420px;gap:20px}
-    @media (max-width:920px){.app{grid-template-columns:1fr;padding:16px;margin:18px auto}}
-
-    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:24px;padding:18px;backdrop-filter:blur(8px) saturate(120%);-webkit-backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.04)}
-    header{display:flex;gap:14px;align-items:center;margin-bottom:12px}
-    .logo{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#ffd166,#ff7b7b);display:grid;place-items:center;font-weight:800;color:#061018}
-    h1{margin:0;font-size:18px}
-    p.lead{margin:2px 0 0;color:var(--muted);font-size:13px}
-
-    .drop{min-height:220px;border-radius:16px;border:1px dashed rgba(255,255,255,0.05);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px}
-    .drop.drag{border-color:rgba(255,255,255,0.12)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap}
-    .btn{padding:10px 14px;border-radius:12px;border:none;background:rgba(255,255,255,0.04);color:inherit;cursor:pointer}
-    .btn.primary{background:linear-gradient(90deg,#ffd166,#ff7b7b);color:#061018;font-weight:700}
-
-    .file-list{margin-top:14px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto;padding-right:6px}
-    .file-row{display:flex;gap:12px;align-items:center;padding:10px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));}
-    .f-icon{width:56px;height:56px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,0.25);font-size:20px}
-    .f-meta{flex:1;min-width:0}
-    .fname{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .fmeta{font-size:12px;color:var(--muted);margin-top:4px}
-    .f-actions{display:flex;gap:8px}
-
-    .box{display:flex;flex-direction:column;gap:12px}
-    textarea{width:100%;min-height:160px;background:transparent;border-radius:12px;border:1px solid rgba(255,255,255,0.04);padding:12px;color:inherit;font-size:14px}
-    .small{font-size:13px;color:var(--muted)}
-
-    footer{text-align:center;color:var(--muted);margin-top:18px;font-size:13px}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>QuickBridge — Supabase File Bridge</title>
+<meta name="color-scheme" content="dark">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root{--bg1:#071025;--bg2:#08121a;--muted:#b6c2cc;--accent:#ffd166}
+  *{box-sizing:border-box;font-family:Inter,ui-sans-serif;color:#ecf6ff}
+  html,body{height:100%;margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2))}
+  .app{max-width:1100px;margin:36px auto;padding:20px;display:grid;grid-template-columns:1fr 420px;gap:20px}
+  @media (max-width:920px){
+    .app{grid-template-columns:1fr}
+    .card.text-area{display:none}
+    .app.show-text .card.files{display:none}
+    .app.show-text .card.text-area{display:block}
+    #swapView{display:block}
+  }
+  .card{background:rgba(255,255,255,0.03);border-radius:20px;padding:18px}
+  header{display:flex;gap:14px;align-items:center;margin-bottom:12px}
+  .btn{padding:10px 14px;border-radius:12px;border:none;background:rgba(255,255,255,0.06);cursor:pointer}
+  .btn.primary{background:linear-gradient(90deg,#ffd166,#ff7b7b);color:#061018;font-weight:700}
+  #swapView{display:none;position:fixed;top:12px;right:12px;z-index:1000;background:#ffd166;color:#061018;border:none;border-radius:50%;width:40px;height:40px;font-size:20px}
+  .preview{margin-top:10px;font-size:14px;color:var(--muted)}
+  progress{width:100%;margin-top:8px;display:none}
+</style>
 </head>
 <body>
-  <div class="bg-blob blob-1"></div>
-  <div class="bg-blob blob-2"></div>
 
-  <div class="app">
-    <section class="card">
-      <header>
-        <div class="logo">QB</div>
-        <div>
-          <h1>QuickBridge</h1>
-          <p class="lead">Seamless phone ↔ computer file & text bridge using Supabase Storage.</p>
-        </div>
-      </header>
+<button id="swapView">⇆</button>
 
-      <div id="drop" class="drop">
-        <div style="text-align:center">
-          <div style="font-weight:700;font-size:16px">Upload files</div>
-          <div class="small" style="margin-top:6px">Drag & drop or choose files. Files appear below and are downloadable on any device with this page open.</div>
-        </div>
+<div class="app" id="appContainer">
+  <!-- FILES CARD -->
+  <section class="card files">
+    <header>
+      <div style="font-weight:800;font-size:20px">QuickBridge</div>
+    </header>
+    <div id="drop" style="border:1px dashed rgba(255,255,255,0.2);padding:12px;border-radius:10px">
+      <input id="fileInput" type="file" multiple style="display:none">
+      <button class="btn" id="chooseBtn">Choose files</button>
+      <button class="btn primary" id="uploadBtn">Upload Selected</button>
+      <button class="btn" id="refreshBtn">Refresh list</button>
+      <button class="btn" id="clearFilesBtn">Clear remote</button>
+      <div class="preview" id="preview"></div>
+      <progress id="progressBar" max="100" value="0"></progress>
+    </div>
+    <div id="fileList" style="margin-top:14px;font-size:14px;color:var(--muted)">Loading files…</div>
+  </section>
 
-        <div class="controls">
-          <label class="btn" style="display:inline-flex;align-items:center;gap:8px">
-            <input id="fileInput" type="file" multiple style="display:none">
-            <span>Choose files</span>
-          </label>
-          <button id="uploadBtn" class="btn primary">Upload Selected</button>
-          <button id="refreshBtn" class="btn">Refresh list</button>
-          <button id="clearFilesBtn" class="btn">Clear remote files</button>
-        </div>
-      </div>
-
-      <div class="file-list card" id="fileList" style="margin-top:14px;padding:12px">
-        <!-- files render here -->
-      </div>
-
-    </section>
-
-    <aside class="card box">
-      <div>
-        <div class="small" style="font-weight:700">Quick text bridge</div>
-        <div class="small">Save text and load it on other devices. Both local and remote clear available.</div>
-        <textarea id="textArea" placeholder="Type text to sync..."></textarea>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button id="saveText" class="btn primary">Save</button>
-          <button id="loadText" class="btn">Load</button>
-          <button id="clearTextRemote" class="btn">Clear remote</button>
-          <button id="clearTextLocal" class="btn">Clear local</button>
-        </div>
-        <div id="savedPreview" class="small" style="margin-top:8px;word-break:break-word;color:var(--muted)">Remote text: <em id="remoteSnippet">(not loaded yet)</em></div>
-      </div>
-
-      <div class="small" style="color:var(--muted);margin-top:6px">Notes: Files are uploaded to your <code>quickbridge</code> bucket. If your bucket is private, temporary signed URLs will be created for downloads. For persistent public sharing consider making the bucket public in Supabase console.</div>
-    </aside>
-  </div>
-
-  <footer></footer>
+  <!-- TEXT CARD -->
+  <aside class="card text-area">
+    <textarea id="textArea" placeholder="Type text to sync..." style="width:100%;min-height:160px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.1)"></textarea>
+    <div style="margin-top:8px">
+      <button class="btn primary" id="saveText">Save</button>
+      <button class="btn" id="loadText">Load</button>
+      <button class="btn" id="clearTextRemote">Clear remote</button>
+      <button class="btn" id="clearTextLocal">Clear local</button>
+    </div>
+    <div id="remoteSnippet" style="margin-top:8px;font-size:13px;color:var(--muted)">(not loaded yet)</div>
+  </aside>
+</div>
 
 <script>
-// Supabase config (same as before)
 const SUPABASE_URL = 'https://nuyctnaioepalgytinwd.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51eWN0bmFpb2VwYWxneXRpbndkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ3NjgzMDYsImV4cCI6MjA3MDM0NDMwNn0.rZ_IQR8EqVaMIuM3nSpzY5bIXRREXRaClcQS7Tmw6yI';
 const BUCKET = 'quickbridge';
 const TEXT_TABLE_ID = 1;
-
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// UI refs
 const fileInput = document.getElementById('fileInput');
+const chooseBtn = document.getElementById('chooseBtn');
 const uploadBtn = document.getElementById('uploadBtn');
 const refreshBtn = document.getElementById('refreshBtn');
 const clearFilesBtn = document.getElementById('clearFilesBtn');
+const previewEl = document.getElementById('preview');
+const progressBar = document.getElementById('progressBar');
 const fileListEl = document.getElementById('fileList');
-const drop = document.getElementById('drop');
+const swapView = document.getElementById('swapView');
+const appContainer = document.getElementById('appContainer');
 
 let selectedFiles = [];
 
-// NEW: preview container & progress bar
-const previewContainer = document.createElement('div');
-previewContainer.style.marginTop = '10px';
-drop.appendChild(previewContainer);
+chooseBtn.onclick = () => fileInput.click();
+fileInput.onchange = (e) => {
+  selectedFiles = Array.from(e.target.files);
+  previewSelected();
+};
 
-const progressBar = document.createElement('progress');
-progressBar.value = 0;
-progressBar.max = 100;
-progressBar.style.width = '100%';
-progressBar.style.display = 'none';
-drop.appendChild(progressBar);
-
-function fmtBytes(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+function fmtBytes(bytes){
+  if (bytes<1024) return bytes+' B';
+  if (bytes<1024*1024) return (bytes/1024).toFixed(1)+' KB';
+  return (bytes/(1024*1024)).toFixed(1)+' MB';
 }
 
-function showSelectedFiles() {
-  previewContainer.innerHTML = '';
-  if (!selectedFiles.length) return;
-  selectedFiles.forEach(file => {
-    const div = document.createElement('div');
-    div.textContent = `${file.name} (${fmtBytes(file.size)})`;
-    previewContainer.appendChild(div);
-  });
+function previewSelected(){
+  if(!selectedFiles.length){ previewEl.textContent = 'No files selected.'; return; }
+  previewEl.innerHTML = selectedFiles.map(f=>`${f.name} (${fmtBytes(f.size)})`).join('<br>');
 }
 
-async function uploadFiles(files) {
-  if (!files.length) return alert('No files selected!');
+async function uploadFiles(){
+  if(!selectedFiles.length) return alert('Pick files first.');
   uploadBtn.disabled = true;
   progressBar.style.display = 'block';
   progressBar.value = 0;
 
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
+  for(let i=0;i<selectedFiles.length;i++){
+    const f = selectedFiles[i];
     const name = `${Date.now()}_${f.name}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(name, f, {
-      cacheControl: '3600',
-      upsert: false
-    });
-    if (error) {
-      alert(`Upload failed for ${f.name}: ${error.message}`);
-      console.error(error);
-    }
-    progressBar.value = ((i + 1) / files.length) * 100;
+    const { error } = await supabase.storage.from(BUCKET).upload(name, f);
+    if(error) alert(`Upload failed for ${f.name}: ${error.message}`);
+    progressBar.value = ((i+1)/selectedFiles.length)*100;
   }
 
-  uploadBtn.disabled = false;
   progressBar.style.display = 'none';
+  uploadBtn.disabled = false;
   selectedFiles = [];
-  previewContainer.innerHTML = '';
+  previewSelected();
   renderFileList();
-  alert('Upload complete!');
+  alert('Upload complete');
 }
 
-// EVENTS
-fileInput.addEventListener('change', (e) => {
-  selectedFiles = Array.from(e.target.files);
-  showSelectedFiles();
-});
+uploadBtn.onclick = uploadFiles;
 
-uploadBtn.addEventListener('click', () => uploadFiles(selectedFiles));
-
-drop.addEventListener('drop', (e) => {
-  e.preventDefault();
-  selectedFiles = Array.from(e.dataTransfer.files);
-  showSelectedFiles();
-});
-
-['dragenter','dragover'].forEach(ev =>
-  drop.addEventListener(ev, e => {
-    e.preventDefault();
-    drop.classList.add('drag');
-  })
-);
-['dragleave','drop'].forEach(ev =>
-  drop.addEventListener(ev, e => {
-    e.preventDefault();
-    drop.classList.remove('drag');
-  })
-);
-
-// Your existing renderFileList function stays here
 async function renderFileList(){
-  fileListEl.innerHTML = '<div class="small" style="padding:8px;color:var(--muted)">Loading files…</div>';
-  const res = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
-  if (res.error) {
-    fileListEl.innerHTML = `<div style="color:red">Error loading files: ${res.error.message}</div>`;
-    return;
-  }
-  fileListEl.innerHTML = '';
-  res.data.forEach(f => {
-    const div = document.createElement('div');
-    div.textContent = `${f.name} (${fmtBytes(f.size)})`;
-    fileListEl.appendChild(div);
-  });
+  const { data, error } = await supabase.storage.from(BUCKET).list('', {limit:1000});
+  if(error) return fileListEl.textContent = `Error: ${error.message}`;
+  if(!data.length) return fileListEl.textContent = 'No files in bucket yet.';
+  fileListEl.innerHTML = data.map(f=>`${f.name} (${fmtBytes(f.size)})`).join('<br>');
 }
+refreshBtn.onclick = renderFileList;
 
-refreshBtn.addEventListener('click', renderFileList);
-clearFilesBtn.addEventListener('click', async () => {
-  if (!confirm('Delete all files?')) return;
-  const { data } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
-  await supabase.storage.from(BUCKET).remove(data.map(d => d.name));
+clearFilesBtn.onclick = async()=>{
+  if(!confirm('Delete all files?')) return;
+  const { data } = await supabase.storage.from(BUCKET).list('', {limit:1000});
+  if(data.length) await supabase.storage.from(BUCKET).remove(data.map(d=>d.name));
   renderFileList();
-});
+};
 
+// Text sync
+const textArea = document.getElementById('textArea');
+const remoteSnippet = document.getElementById('remoteSnippet');
+document.getElementById('saveText').onclick = async()=>{
+  const { error } = await supabase.from('shared_text').update({ content: textArea.value }).eq('id', TEXT_TABLE_ID);
+  if(error) alert('Save failed: '+error.message); else remoteSnippet.textContent = textArea.value.slice(0,200) || '(empty)';
+};
+document.getElementById('loadText').onclick = async()=>{
+  const { data, error } = await supabase.from('shared_text').select('content').eq('id', TEXT_TABLE_ID).single();
+  if(error) alert('Load failed: '+error.message); else { textArea.value = data.content || ''; remoteSnippet.textContent = (data.content||'').slice(0,200) || '(empty)'; }
+};
+document.getElementById('clearTextRemote').onclick = async()=>{
+  if(!confirm('Clear remote text?')) return;
+  await supabase.from('shared_text').update({ content: '' }).eq('id', TEXT_TABLE_ID);
+  remoteSnippet.textContent = '(empty)';
+};
+document.getElementById('clearTextLocal').onclick = ()=>{ if(confirm('Clear local text?')) textArea.value=''; };
+
+// Swap view on mobile
+swapView.onclick = ()=> appContainer.classList.toggle('show-text');
+
+// Init
+previewSelected();
 renderFileList();
 </script>
+
 </body>
 </html>
